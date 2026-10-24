@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>コードジェネレーター</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; max-width: 450px; margin: 0 auto; background: #f0f0f5; }
+        label { display: block; margin-top: 10px; font-weight: bold; font-size: 14px; }
+        select, input { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; font-size: 14px; }
+        button { width: 100%; padding: 12px; margin-top: 20px; background: #4CAF50; color: white; border: none; font-size: 16px; font-weight: bold; border-radius: 5px; cursor: pointer; }
+        #result-box { margin-top: 15px; background: white; padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
+        #result { font-family: monospace; font-size: 14px; color: blue; word-break: break-all; }
+        .count-text { color: gray; font-size: 13px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <h2>コードジェネレーター</h2>
+
+    <label>【場所】</label>
+    <select id="location" onchange="onLocationChange()">
+        <option value="北校舎">北校舎</option>
+        <option value="南校舎">南校舎</option>
+        <option value="校庭">校庭</option>
+        <option value="西グラウンド">西グラウンド</option>
+        <option value="昇降口">昇降口</option>
+    </select>
+
+    <label>【階数】</label>
+    <select id="floor">
+        <option value="">なし</option>
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+    </select>
+
+    <label>【教室の種類】</label>
+    <select id="room_type" onchange="onTypeChange()">
+        <option value="">なし</option>
+        <option value="普通クラス">普通クラス</option>
+        <option value="特別室">特別室</option>
+    </select>
+
+    <label>【教室・部室名】</label>
+    <select id="room_name" onchange="onRoomChange()">
+        <option value="">なし</option>
+    </select>
+
+    <label>【位置】</label>
+    <select id="position">
+        <option value="">なし</option>
+        <option value="ne">ne</option>
+        <option value="outside">outside</option>
+        <option value="roadofout">roadofout</option>
+        <option value="in">in</option>
+    </select>
+
+    <label>【難易度】</label>
+    <select id="difficulty">
+        <option value="EASY">EASY</option>
+        <option value="MIDDLE">MIDDLE</option>
+        <option value="HARD">HARD</option>
+        <option value="DEMON">DEMON</option>
+    </select>
+
+    <label>【ユーザー名】</label>
+    <input type="text" id="username" value="user">
+
+    <label>【管理番号 下2桁】</label>
+    <input type="text" id="admin_last_two" value="00">
+
+    <button onclick="generateCode()">コードを生成する</button>
+
+    <div class="count-text" id="count-display">現在の生成回数カウント: 1 (16進数: 001)</div>
+
+    <div id="result-box">
+        <b>【生成されたコード】</b>
+        <div id="result">ここにコードが表示されます</div>
+    </div>
+
+    <script>
+        let count = parseInt(localStorage.getItem('saved_count') || '1');
+        updateCountDisplay();
+
+        const classrooms = ["6-1", "6-2", "5-1", "5-2", "4-1", "3-1", "3-2", "2-1", "2-2", "1-1"];
+        const specialRooms = ["理科室", "理科準備室", "家庭科室", "家庭科準備室", "図工室", "保健室", "図書館", "多目的室", "音楽室", "楽器保管室", "職員室", "管理棟", "廊下"];
+        const specialRoomCodes = {
+            "理科室": "310sci", "理科準備室": "311scipre", "家庭科室": "806aws",
+            "家庭科準備室": "816aespre", "図工室": "296pic", "保健室": "359cle",
+            "図書館": "430lib", "多目的室": "167var", "音楽室": "513mus",
+            "楽器保管室": "523muscha", "職員室": "307tea", "管理棟": "999sch",
+            "廊下": "000roadroadroad"
+        };
+
+        function onLocationChange() {
+            const loc = document.getElementById("location").value;
+            const floorSel = document.getElementById("floor");
+            const typeSel = document.getElementById("room_type");
+            
+            if (loc === "北校舎" || loc === "南校舎") {
+                floorSel.disabled = false;
+                typeSel.disabled = false;
+            } else {
+                floorSel.value = ""; floorSel.disabled = true;
+                typeSel.value = ""; typeSel.disabled = true;
+                document.getElementById("room_name").innerHTML = '<option value="">なし</option>';
+                document.getElementById("room_name").disabled = true;
+            }
+            updatePositionOptions();
+        }
+
+        function onTypeChange() {
+            const t = document.getElementById("room_type").value;
+            const roomSel = document.getElementById("room_name");
+            roomSel.innerHTML = '<option value="">なし</option>';
+            roomSel.disabled = false;
+
+            const list = (t === "普通クラス") ? classrooms : specialRooms;
+            list.forEach(item => {
+                const opt = document.createElement("option");
+                opt.value = item;
+                opt.textContent = item;
+                roomSel.appendChild(opt);
+            });
+            updatePositionOptions();
+        }
+
+        function onRoomChange() {
+            updatePositionOptions();
+        }
+
+        function updatePositionOptions() {
+            const room = document.getElementById("room_name").value;
+            const loc = document.getElementById("location").value;
+            const posSel = document.getElementById("position");
+            const allowIn = (room === "6-1" || loc === "西グラウンド" || loc === "校庭");
+
+            posSel.innerHTML = `
+                <option value="">なし</option>
+                ${allowIn ? '<option value="in">in</option>' : ''}
+                <option value="ne">ne</option>
+                <option value="outside">outside</option>
+                <option value="roadofout">roadofout`
+        }
+
+        function updateCountDisplay() {
+            const hex = count.toString(16).padStart(3, '0');
+            document.getElementById("count-display").innerText = `現在の生成回数カウント: ${count} (16進数: ${hex})`;
+        }
+
+        function generateCode() {
+            try {
+                const loc = document.getElementById("location").value;
+                const floor = document.getElementById("floor").value;
+                const rType = document.getElementById("room_type").value;
+                const rName = document.getElementById("room_name").value;
+                const pos = document.getElementById("position").value;
+                const diff = document.getElementById("difficulty").value;
+                const user = document.getElementById("username").value.trim();
+                const admin = document.getElementById("admin_last_two").value.trim();
+
+                const prefixMap = { "北校舎": "NOR", "南校舎": "SOU", "校庭": "EA", "西グラウンド": "WE", "昇降口": "ENTRA" };
+                const prefix = prefixMap[loc] || "UNKNOWN";
+                const floorCode = (loc === "北校舎" || loc === "南校舎") && floor ? `F0${floor}` : "";
+
+                let roomCode = "";
+                if ((loc === "北校舎" || loc === "南校舎") && rName) {
+                    if (rType === "特別室" && specialRoomCodes[rName]) {
+                        roomCode = `sp${specialRoomCodes[rName]}`;
+                    } else if (rType === "普通クラス" && rName.includes("-")) {
+                        const parts = rName.split("-");
+                        roomCode = `n${parts[0]}0${parts[1]}cr`;
+                    }
+                }
+
+                if (pos === "in" && rName !== "6-1" && loc !== "西グラウンド" && loc !== "校庭") {
+                    throw new Error("「in」は6-1、西グラウンド、校庭のみ有効です。");
+                }
+                const posCode = pos ? pos : "";
+
+                const diffMap = { "EASY": "ea", "MIDDLE": "mi", "HARD": "ha", "DEMON": "de" };
+                const diffCode = diffMap[diff] || "";
+
+                if (!user) throw new Error("ユーザー名を入力してください。");
+                if (admin.length !== 2 || !/^\d{2}$/.test(admin)) {
+                    throw new Error("管理番号の下2桁を半角数字2桁で入力してください。");
+                }
+                const userInfoCode = `${user}ask210${admin}`;
+
+                const hexCount = count.toString(16).padStart(3, '0');
+                const randChars = "0123456789abcdef";
+                let randomHex = "";
+                for (let i = 0; i < 6; i++) {
+                    randomHex += randChars[Math.floor(Math.random() * randChars.length)];
+                }
+
+                const finalCode = `${prefix}${floorCode}${roomCode}${posCode}${diffCode}${userInfoCode}${hexCount}${randomHex}`;
+                document.getElementById("result").innerText = finalCode;
+
+                count++;
+                localStorage.setItem('saved_count', count);
+                updateCountDisplay();
+
+            } catch (e) {
+                alert("エラー: " + e.message);
+            }
+        }
+    </script>
+</body>
+</html>
